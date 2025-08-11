@@ -1,45 +1,55 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -euo pipefail
 
-APP_DIR="/home/ec2-user/final-python-app"
+# ---------------- CONFIG ----------------
+IMAGE="mosheshay/final-python-app:latest"   # <-- make sure this EXACTLY matches your Docker Hub repo/tag
 CONTAINER_NAME="final-python-app"
-IMAGE_USER="${DOCKERHUB_USERNAME:-mosheshy}"   # override via env if needed
-IMAGE="$IMAGE_USER/final-python-app:latest"
+CONTAINER_PORT="5000"
+HOST_PORT="80"             
+# ----------------------------------------
 
-mkdir -p "$APP_DIR"
-cd "$APP_DIR"
-
-# Pick docker or sudo docker depending on permissions
-DOCKER="docker"
-if ! docker info >/dev/null 2>&1; then
-  if command -v sudo >/dev/null 2>&1 && sudo -n docker info >/dev/null 2>&1; then
-    DOCKER="sudo docker"
-  else
-    echo "Docker is not accessible. Ensure it is installed and running." >&2
-    exit 1
-  fi
+# If ec2-user session doesn't yet have docker group, fall back to sudo
+DOCKER_BIN="docker"
+if ! $DOCKER_BIN ps >/dev/null 2>&1; then
+  DOCKER_BIN="sudo docker"
 fi
 
-# Stop/remove any existing container
-$DOCKER stop "$CONTAINER_NAME" 2>/dev/null || true
-$DOCKER rm "$CONTAINER_NAME" 2>/dev/null || true
+# --- If your Docker Hub repo is PRIVATE, login first ---
+# Option A: expect env vars on the instance (or injected securely)
+#   export DOCKERHUB_USERNAME="your_user"
+#   export DOCKERHUB_PASSWORD="your_token"
+if [ -n "${DOCKERHUB_USERNAME:-}" ] && [ -n "${DOCKERHUB_PASSWORD:-}" ]; then
+  echo "$DOCKERHUB_PASSWORD" | $DOCKER_BIN login -u "$DOCKERHUB_USERNAME" --password-stdin
+fi
 
-# Pull and run the image
-$DOCKER pull "$IMAGE"
-$DOCKER run -d \
+# Option B (commented): fetch creds from SSM Parameter Store (instance role needs ssm:GetParameter)
+# DOCKERHUB_USERNAME=$(aws ssm get-parameter --name "/dockerhub/username" --with-decryption --query "Parameter.Value" --output text)
+# DOCKERHUB_PASSWORD=$(aws ssm get-parameter --name "/dockerhub/token"    --with-decryption --query "Parameter.Value" --output text)
+# echo "$DOCKERHUB_PASSWORD" | $DOCKER_BIN login -u "$DOCKERHUB_USERNAME" --password-stdin
+
+# Pull the image
+$DOCKER_BIN pull "$IMAGE"
+
+# Stop existing container if any (idempotent)
+if $DOCKER_BIN ps -a --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
+  $DOCKER_BIN rm -f "$CONTAINER_NAME" || true
+fi
+
+# Ensure host port is free (best effort)
+if command -v ss >/dev/null 2>&1 && ss -ltn "( sport = :$HOST_PORT )" | grep -q ":$HOST_PORT"; then
+  echo "Port $HOST_PORT is in use; attempting to free it by removing $CONTAINER_NAME if running."
+  $DOCKER_BIN rm -f "$CONTAINER_NAME" || true
+fi
+
+# Run container
+$DOCKER_BIN run -d \
   --name "$CONTAINER_NAME" \
-  -p 5000:5000 \
+  -p "${HOST_PORT}:${CONTAINER_PORT}" \
   --restart unless-stopped \
   "$IMAGE"
 
-sleep 5
+# Simple health check (best effort)
+sleep 3
+$DOCKER_BIN ps --filter "name=$CONTAINER_NAME"
 
-# Verify
-if $DOCKER ps | grep -q "$CONTAINER_NAME"; then
-  echo "Application started on port 5000"
-  $DOCKER ps | grep "$CONTAINER_NAME"
-else
-  echo "Failed to start container" >&2
-  $DOCKER logs "$CONTAINER_NAME" || true
-  exit 1
-fi
+echo "[start_application] Launched $CONTAINER_NAME on port ${HOST_PORT}->${CONTAINER_PORT}"

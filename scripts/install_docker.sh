@@ -1,46 +1,49 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -euo pipefail
 
-# Idempotent Docker setup for EC2 (Amazon Linux 2 / Ubuntu)
+# Detect Amazon Linux 2 vs 2023
+is_al2023=false
+if [ -f /etc/os-release ]; then
+  . /etc/os-release
+  if [[ "${NAME:-}" == "Amazon Linux" && "${VERSION_ID:-}" =~ ^2023 ]]; then
+    is_al2023=true
+  fi
+fi
 
-if command -v docker >/dev/null 2>&1; then
-  echo "Docker already installed: $(docker --version)"
+# Update
+if $is_al2023; then
+  dnf -y update
 else
-  if command -v yum >/dev/null 2>&1; then
-    echo "Installing Docker via yum..."
-    yum update -y
-    yum install -y docker
-  elif command -v apt-get >/dev/null 2>&1; then
-    echo "Installing Docker via apt..."
-    export DEBIAN_FRONTEND=noninteractive
-    apt-get update -y
-    apt-get install -y docker.io
+  yum -y update
+fi
+
+# Install Docker
+if ! command -v docker >/dev/null 2>&1; then
+  if $is_al2023; then
+    dnf -y install docker
   else
-    echo "Unsupported OS: neither yum nor apt-get found" >&2
-    exit 1
+    amazon-linux-extras install -y docker || yum -y install docker
   fi
 fi
 
-# Ensure Docker service is enabled and running
-if command -v systemctl >/dev/null 2>&1; then
-  systemctl enable docker || true
-  systemctl start docker || true
+# Enable & start Docker
+systemctl enable docker
+systemctl start docker
+
+# Optional: docker compose v2 plugin (best-effort)
+if $is_al2023; then
+  dnf -y install docker-compose-plugin || true
+else
+  yum -y install docker-compose-plugin || true
 fi
 
-# Add common users to docker group so hooks can run without sudo when not root
-for u in ec2-user ubuntu; do
-  if id "$u" >/dev/null 2>&1; then
-    usermod -aG docker "$u" || true
+# Let ec2-user use docker (future sessions)
+if id ec2-user &>/dev/null; then
+  if ! id -nG ec2-user | grep -qw docker; then
+    usermod -aG docker ec2-user
+    # Refresh CodeDeploy agent session so ApplicationStart (runas ec2-user) gets the new group
+    systemctl restart codedeploy-agent || true
   fi
-done
-
-# Optional: Login to DockerHub if credentials provided via environment variables
-if [[ -n "${DOCKERHUB_USERNAME:-}" && -n "${DOCKERHUB_TOKEN:-}" ]]; then
-  echo "Logging into DockerHub for $DOCKERHUB_USERNAME ..."
-  echo "$DOCKERHUB_TOKEN" | docker login --username "$DOCKERHUB_USERNAME" --password-stdin || true
 fi
 
-# Verify
-docker --version
-
-echo "Docker is ready."
+echo "[install_docker] Docker version: $(docker --version || echo 'unknown')"

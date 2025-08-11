@@ -1,21 +1,19 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -euo pipefail
 
-CONTAINER_NAME="final-python-app"
+APP_NAME="final-python-app"
+CONTAINER_NAME="$APP_NAME"
 
-# Pick docker or sudo docker depending on permissions
-DOCKER="docker"
-if ! docker info >/dev/null 2>&1; then
-  if command -v sudo >/dev/null 2>&1 && sudo -n docker info >/dev/null 2>&1; then
-    DOCKER="sudo docker"
-  else
-    echo "Docker is not accessible. Ensure it is installed and running." >&2
-    exit 1
-  fi
+# If ec2-user session doesn't yet have docker group, fall back to sudo
+DOCKER_BIN="docker"
+if ! $DOCKER_BIN ps >/dev/null 2>&1; then
+  DOCKER_BIN="sudo docker"
 fi
 
-echo "Stopping $CONTAINER_NAME container..."
-$DOCKER stop "$CONTAINER_NAME" 2>/dev/null || true
-$DOCKER rm "$CONTAINER_NAME" 2>/dev/null || true
+# Stop & remove the container if it exists
+if $DOCKER_BIN ps -a --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
+  $DOCKER_BIN rm -f "$CONTAINER_NAME" || true
+fi
 
-echo "Application stopped successfully"
+# Optional: clean up unused stuff to free space
+$DOCKER_BIN system prune -f || true
