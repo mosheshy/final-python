@@ -26,3 +26,21 @@ Swagger-UI can be used to test the application.
 
 The server will start at <http://localhost:5000>.
 
+
+#---
+
+## 🚀 Running the Application with Docker
+
+This project includes a ready-to-use Dockerfile.
+
+### 1. Build the Docker image
+
+```bash
+docker build -t final-python-app .
+
+docker run -p 5000:5000 final-python-app
+```
+
+# The application will be available at http://localhost:5000
+
+# Swagger : http://localhost:5000/api/doc
