@@ -1,3 +1,33 @@
+# Final Python – Dockerized App + CI to Docker Hub
+
+[![Build & Push](https://github.com/<YOUR_GITHUB_USER>/<YOUR_REPO>/actions/workflows/docker-build-push.yml/badge.svg)](https://github.com/<YOUR_GITHUB_USER>/<YOUR_REPO>/actions/workflows/docker-build-push.yml)
+[![Docker Pulls](https://img.shields.io/docker/pulls/<DOCKERHUB_USER>/<DOCKERHUB_REPO>.svg)](https://hub.docker.com/r/<DOCKERHUB_USER>/<DOCKERHUB_REPO>)
+
+> Replace placeholders: `<YOUR_GITHUB_USER>`, `<YOUR_REPO>`, `<DOCKERHUB_USER>`, `<DOCKERHUB_REPO>`.
+
+## Overview
+This repository contains a simple Python/Flask app, containerized with Docker.  
+A GitHub Actions workflow builds the image on each push to `main` (or `master`) and pushes it to Docker Hub.
+
+---
+
+## Quick Start (Local)
+
+### 1) Run with Docker
+```bash
+# From the repo root (where Dockerfile is located)
+docker build -t final-python-app .
+docker run -d -p 5000:5000 --name final-python-app final-python-app
+
+# Open in browser:
+# http://localhost:5000
+
+
+
+
+
+
+
 ## Sample Flask application using [Flask-RESTPlus](https://flask-restplus.readthedocs.io/en/stable/index.html) , [Flask-Marshmallow](https://flask-marshmallow.readthedocs.io/en/latest/) and [Flask-SQLAlchemy](https://flask-sqlalchemy.palletsprojects.com/en/2.x/quickstart/)
 
 ## Setting up the VirtualEnv and install dependencies
